@@ -226,11 +226,6 @@ def main():
     else:
         cw_text = str(cw_unread)
 
-    detail_url = os.environ.get(
-        "BRIEF_DETAIL_URL",
-        os.environ.get("CHATWOOT_BASE_URL", "https://example.com"),
-    )
-
     values = {
         "DATE": datetime.now().strftime("%d/%m/%Y"),
         "RESUME": compute_resume(cont_color, maj_color, bkp_color),
@@ -241,7 +236,6 @@ def main():
         "SAUVEGARDES_COULEUR": bkp_color,
         "SAUVEGARDES_TEXTE": bkp_text,
         "CHATWOOT_NON_LUS": cw_text,
-        "LIEN_DETAIL": detail_url,
     }
 
     html = render(TEMPLATE_PATH, values)

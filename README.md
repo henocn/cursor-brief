@@ -36,7 +36,6 @@ Aucune dépendance externe : le script utilise uniquement la bibliothèque stand
 | `RESTIC_REPOSITORY` | non | Dépôt Restic (active la vérification off-site) |
 | `RESTIC_PASSWORD` | non | Mot de passe du dépôt Restic |
 | `BACKUP_DIR` | non | Dossier de backups locaux (défaut : `/opt/backups`) |
-| `BRIEF_DETAIL_URL` | non | Lien du bouton « Voir le détail » |
 
 > **Sécurité** : ne jamais commiter de secrets. Utilisez le fichier `.env` (ignoré par git) ou les variables d'environnement du système.
 
