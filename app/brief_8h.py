@@ -34,6 +34,9 @@ TEMPLATE_PATH = SCRIPT_DIR / "templates" / "brief.html"
 
 def check_containers():
     """Vérifie que tous les conteneurs Docker sont « running »."""
+    ignore_raw = os.environ.get("IGNORE_CONTAINERS", "listmonk_app,listmonk_db")
+    ignored = {c.strip() for c in ignore_raw.split(",") if c.strip()}
+
     try:
         raw = subprocess.check_output(
             ["docker", "ps", "-a", "--format", "{{.Names}}\t{{.Status}}"],
@@ -50,13 +53,19 @@ def check_containers():
     not_running = []
     for line in lines:
         name, status = line.split("\t", 1)
-        if not status.lower().startswith("up"):
-            not_running.append(name)
+        if name in ignored:
+            continue
+        lower_status = status.lower()
+        if lower_status.startswith("up"):
+            continue
+        if "exited (0)" in lower_status:
+            continue
+        not_running.append(name)
 
-    total = len(lines)
+    monitored = len([l for l in lines if l.split("\t", 1)[0] not in ignored])
     if not_running:
-        return KO, f"{len(not_running)}/{total} arrêté(s) : {', '.join(not_running)}"
-    return OK, f"{total}/{total} en cours d'exécution"
+        return KO, f"{len(not_running)}/{monitored} arrêté(s) : {', '.join(not_running)}"
+    return OK, f"{monitored}/{monitored} en cours d'exécution"
 
 
 ####################################################################
@@ -65,45 +74,25 @@ def check_containers():
 
 
 def check_security_updates():
-    """Compte les mises à jour de sécurité en attente via apt."""
+    """Compte les mises à jour de sécurité en attente via apt (sans sudo)."""
     try:
-        subprocess.check_call(
-            ["apt-get", "update", "-qq"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=120,
-        )
         raw = subprocess.check_output(
-            ["apt-get", "--just-print", "upgrade"],
+            ["apt", "list", "--upgradable"],
             text=True,
+            stderr=subprocess.DEVNULL,
             timeout=60,
         )
     except (subprocess.SubprocessError, FileNotFoundError):
-        try:
-            raw = subprocess.check_output(
-                ["apt", "list", "--upgradable"],
-                text=True,
-                timeout=60,
-            )
-            security = [l for l in raw.splitlines() if "security" in l.lower()]
-            total = len([l for l in raw.splitlines() if "/" in l])
-            if security:
-                return WARN, f"{len(security)} correctif(s) de sécurité sur {total} paquet(s)"
-            if total:
-                return OK, f"{total} mise(s) à jour disponible(s), 0 sécurité"
-            return OK, "système à jour"
-        except (subprocess.SubprocessError, FileNotFoundError):
-            return WARN, "impossible de vérifier (apt indisponible)"
+        return WARN, "impossible de vérifier (apt indisponible)"
 
-    security = [l for l in raw.splitlines() if "security" in l.lower()]
-    all_upgrades = [l for l in raw.splitlines() if l.startswith("Inst ")]
+    packages = [l for l in raw.splitlines() if "/" in l]
+    security = [l for l in packages if "security" in l.lower()]
 
     if security:
-        return KO if len(security) > 10 else WARN, (
-            f"{len(security)} correctif(s) de sécurité en attente"
-        )
-    if all_upgrades:
-        return OK, f"{len(all_upgrades)} mise(s) à jour, 0 sécurité"
+        color = KO if len(security) > 10 else WARN
+        return color, f"{len(security)} correctif(s) de sécurité sur {len(packages)} paquet(s)"
+    if packages:
+        return OK, f"{len(packages)} mise(s) à jour disponible(s), 0 sécurité"
     return OK, "système à jour"
 
 
@@ -160,7 +149,7 @@ def check_backups():
 
 
 def check_chatwoot():
-    """Interroge l'API Chatwoot pour compter les conversations ouvertes non lues."""
+    """Interroge /conversations/meta pour obtenir le nombre de conversations non lues."""
     base_url = os.environ.get("CHATWOOT_BASE_URL", "").rstrip("/")
     token = os.environ.get("CHATWOOT_API_TOKEN", "")
     account_id = os.environ.get("CHATWOOT_ACCOUNT_ID", "1")
@@ -168,7 +157,7 @@ def check_chatwoot():
     if not base_url or not token:
         return 0, "variables CHATWOOT_BASE_URL / CHATWOOT_API_TOKEN manquantes"
 
-    url = f"{base_url}/api/v1/accounts/{account_id}/conversations?status=open"
+    url = f"{base_url}/api/v1/accounts/{account_id}/conversations/meta"
     req = urllib.request.Request(url, headers={
         "api_access_token": token,
         "Content-Type": "application/json",
@@ -176,9 +165,9 @@ def check_chatwoot():
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read())
-        conversations = data.get("data", {}).get("payload", [])
-        unread = sum(1 for c in conversations if c.get("unread_count", 0) > 0)
-        return unread, None
+        meta = data.get("data", {}).get("meta", data.get("meta", {}))
+        all_count = meta.get("all_count", 0)
+        return all_count, None
     except (urllib.error.URLError, json.JSONDecodeError, KeyError) as exc:
         return 0, str(exc)
 

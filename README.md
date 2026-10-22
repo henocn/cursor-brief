@@ -6,73 +6,116 @@ E-mail matinal automatique qui résume l'état de votre VPS Ubuntu chaque jour o
 
 | Indicateur | Méthode |
 |---|---|
-| **Conteneurs Docker** | `docker ps -a` — vert si tous « Up », rouge sinon |
-| **Mises à jour sécurité** | `apt` — vert si 0 correctif sécu, orange/rouge sinon |
+| **Conteneurs Docker** | `docker ps -a` — vert si tous « Up » (ignore les `Exited (0)` et les conteneurs listés dans `IGNORE_CONTAINERS`) |
+| **Mises à jour sécurité** | `apt list --upgradable` — vert si 0 correctif sécu, orange/rouge sinon (pas besoin de root) |
 | **Sauvegardes** | Restic (dernier snapshot) ou `/opt/backups` (date du fichier le plus récent) ; orange si aucune sauvegarde off-site configurée |
-| **Chatwoot** | API REST — nombre de conversations ouvertes non lues |
+| **Chatwoot** | API `/conversations/meta` — nombre de conversations ouvertes |
+
+## Architecture
+
+```
+┌──────────────────────────────────┐       POST /webhook/brief-8h      ┌──────────────────┐
+│  Cron host (user equipe)         │  ──────────────────────────────▶  │  n8n (conteneur)  │
+│  brief_8h.py → HTML sur stdout   │    Header: X-Brief-Secret         │  Webhook → SMTP   │
+│  curl POST vers n8n              │                                   │  → henoc@…         │
+└──────────────────────────────────┘                                   └──────────────────┘
+```
+
+Le script tourne **sur l'hôte** (accès direct à Docker, apt, backups). Il génère le HTML et l'envoie via `curl` au webhook n8n qui se charge de l'envoi SMTP. Pas de SSH ni d'Execute Command dans le conteneur.
 
 ## Installation
 
 ```bash
-# Cloner le dépôt dans le dossier de vos services Docker
+# Cloner le dépôt
 cd /var/www/docker
-git clone https://github.com/<votre-org>/cursor-brief.git brief-8h
-cd brief-8h
+git clone https://github.com/<votre-org>/cursor-brief.git brief
+cd brief/app
 
 # Copier et remplir les variables d'environnement
-cp .env.example .env
-nano .env          # renseigner au minimum CHATWOOT_BASE_URL et CHATWOOT_API_TOKEN
+cp .env.example ../.env
+nano ../.env       # renseigner au minimum CHATWOOT_BASE_URL, CHATWOOT_API_TOKEN et BRIEF_WEBHOOK_SECRET
 ```
 
 Aucune dépendance externe : le script utilise uniquement la bibliothèque standard Python 3 (≥ 3.8).
 
 ## Variables d'environnement
 
+Le fichier `.env` se place dans `/var/www/docker/brief/.env` (un niveau au-dessus de `app/`).
+
 | Variable | Obligatoire | Description |
 |---|---|---|
 | `CHATWOOT_BASE_URL` | oui | URL de votre instance Chatwoot |
 | `CHATWOOT_API_TOKEN` | oui | Jeton API Chatwoot |
 | `CHATWOOT_ACCOUNT_ID` | non | ID du compte Chatwoot (défaut : `1`) |
+| `BRIEF_WEBHOOK_SECRET` | oui | Secret partagé avec le webhook n8n (header `X-Brief-Secret`) |
+| `IGNORE_CONTAINERS` | non | Conteneurs à exclure du monitoring, séparés par des virgules (défaut : `listmonk_app,listmonk_db`) |
 | `RESTIC_REPOSITORY` | non | Dépôt Restic (active la vérification off-site) |
 | `RESTIC_PASSWORD` | non | Mot de passe du dépôt Restic |
 | `BACKUP_DIR` | non | Dossier de backups locaux (défaut : `/opt/backups`) |
 
 > **Sécurité** : ne jamais commiter de secrets. Utilisez le fichier `.env` (ignoré par git) ou les variables d'environnement du système.
 
+## Crontab (user `equipe`)
+
+Ajouter la ligne suivante avec `crontab -e` :
+
+```cron
+0 8 * * 1-5 cd /var/www/docker/brief/app && set -a && . ../.env && set +a && python3 brief_8h.py --stdout | curl -s -X POST http://127.0.0.1:5678/webhook/brief-8h -H "Content-Type: application/json" -H "X-Brief-Secret: $(printenv BRIEF_WEBHOOK_SECRET)" -d @<(jq -Rsc '{"html": .}') > /dev/null
+```
+
+Détail de la commande :
+1. Charge les variables depuis `../.env`
+2. Exécute le script qui affiche le HTML sur stdout
+3. Enveloppe le HTML dans `{"html": "…"}` via `jq`
+4. POST vers le webhook n8n avec le header d'authentification
+
+### Dépendances système
+
+`curl` et `jq` doivent être installés sur l'hôte :
+
+```bash
+sudo apt install -y curl jq
+```
+
 ## Test rapide
 
 ```bash
 # Charger les variables d'environnement
-set -a && source .env && set +a
+cd /var/www/docker/brief/app
+set -a && . ../.env && set +a
 
-# Générer le brief dans un fichier
-python3 brief_8h.py -o /tmp/brief.html
+# 1. Vérifier la génération du HTML
+python3 brief_8h.py --stdout > /tmp/brief.html
+xdg-open /tmp/brief.html   # ou ouvrir dans un navigateur
 
-# Ou afficher sur stdout
-python3 brief_8h.py --stdout
+# 2. Tester l'envoi au webhook n8n (workflow activé requis)
+python3 brief_8h.py --stdout | curl -s -X POST \
+  http://127.0.0.1:5678/webhook/brief-8h \
+  -H "Content-Type: application/json" \
+  -H "X-Brief-Secret: $BRIEF_WEBHOOK_SECRET" \
+  -d @<(jq -Rsc '{"html": .}')
 ```
-
-Ouvrez `/tmp/brief.html` dans un navigateur pour vérifier le rendu.
 
 ## Workflow n8n
 
 1. Dans n8n, aller dans **Workflows → Importer depuis un fichier**.
 2. Importer `n8n_workflow_brief_8h.json`.
-3. Configurer le credential **SMTP Brief** avec vos paramètres SMTP.
-4. Vérifier que le chemin dans le nœud « Exécuter brief_8h.py » correspond à votre installation.
+3. Créer un credential **Header Auth** : nom `Brief Header Auth`, header `X-Brief-Secret`, valeur = celle de `BRIEF_WEBHOOK_SECRET` dans `.env`.
+4. Configurer le credential **SMTP Brief** avec vos paramètres SMTP.
 5. Activer le workflow.
 
-Le workflow est importé **inactif** par défaut. Il se déclenchera du lundi au vendredi à 08 h 00 UTC.
+Le workflow est importé **inactif** par défaut. Il accepte les requêtes POST sur `/webhook/brief-8h`.
 
 ## Structure du projet
 
 ```
 .
-├── brief_8h.py                  # Script principal
-├── templates/
-│   └── brief.html               # Template HTML de l'e-mail
-├── n8n_workflow_brief_8h.json   # Workflow n8n (inactif)
-├── .env.example                 # Modèle de variables d'environnement
+├── app/
+│   ├── brief_8h.py                  # Script principal
+│   └── templates/
+│       └── brief.html               # Template HTML de l'e-mail
+├── n8n_workflow_brief_8h.json       # Workflow n8n (inactif)
+├── .env.example                     # Modèle de variables d'environnement
 ├── .gitignore
-└── README.md                    # Ce fichier
+└── README.md                        # Ce fichier
 ```

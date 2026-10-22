@@ -3,30 +3,23 @@
   "nodes": [
     {
       "parameters": {
-        "rule": {
-          "interval": [
-            {
-              "field": "cronExpression",
-              "expression": "0 8 * * 1-5"
-            }
-          ]
+        "httpMethod": "POST",
+        "path": "brief-8h",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Brief",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [220, 300],
+      "webhookId": "brief-8h",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REMPLACER_PAR_VOTRE_CREDENTIAL_ID",
+          "name": "Brief Header Auth"
         }
-      },
-      "id": "cron-trigger",
-      "name": "Cron 08h00 UTC (lun-ven)",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2,
-      "position": [220, 300]
-    },
-    {
-      "parameters": {
-        "command": "cd /var/www/docker/brief-8h && /usr/bin/python3 brief_8h.py --stdout"
-      },
-      "id": "exec-script",
-      "name": "Exécuter brief_8h.py",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [460, 300]
+      }
     },
     {
       "parameters": {
@@ -34,14 +27,14 @@
         "toEmail": "henoc@dekaeditions.tg",
         "subject": "=Brief de 8h — {{ $now.format('dd/MM/yyyy') }}",
         "emailType": "html",
-        "html": "={{ $json.stdout }}",
+        "html": "={{ $json.body.html }}",
         "options": {}
       },
       "id": "send-email",
       "name": "Envoyer par e-mail",
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
-      "position": [700, 300],
+      "position": [500, 300],
       "credentials": {
         "smtp": {
           "id": "REMPLACER_PAR_VOTRE_CREDENTIAL_ID",
@@ -51,18 +44,7 @@
     }
   ],
   "connections": {
-    "Cron 08h00 UTC (lun-ven)": {
-      "main": [
-        [
-          {
-            "node": "Exécuter brief_8h.py",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Exécuter brief_8h.py": {
+    "Webhook Brief": {
       "main": [
         [
           {
