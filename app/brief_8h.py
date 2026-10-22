@@ -10,6 +10,8 @@ Usage :
 
 import argparse
 import json
+import logging
+import logging.handlers
 import os
 import subprocess
 import sys
@@ -200,10 +202,29 @@ def compute_resume(cont_color, maj_color, backup_color):
 ####################################################################
 
 
-def _log(msg: str):
-    """Écrit une ligne horodatée sur stderr (visible dans brief.log via cron)."""
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[{ts}] {msg}", file=sys.stderr)
+LOG_MAX_BYTES = 1_048_576  # 1 Mo
+LOG_BACKUP_COUNT = 4
+
+log = logging.getLogger("brief_8h")
+
+
+def setup_logging(logfile: Path | None = None):
+    """Configure le logger : fichier rotatif en mode --post, stderr sinon."""
+    log.setLevel(logging.INFO)
+    fmt = logging.Formatter("[%(asctime)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+
+    if logfile:
+        handler = logging.handlers.RotatingFileHandler(
+            logfile,
+            maxBytes=LOG_MAX_BYTES,
+            backupCount=LOG_BACKUP_COUNT,
+            encoding="utf-8",
+        )
+    else:
+        handler = logging.StreamHandler(sys.stderr)
+
+    handler.setFormatter(fmt)
+    log.addHandler(handler)
 
 
 def post_to_webhook(html: str):
@@ -215,7 +236,7 @@ def post_to_webhook(html: str):
     secret = os.environ.get("BRIEF_WEBHOOK_SECRET", "")
 
     if not secret or secret.startswith("changez_moi"):
-        _log("ERREUR : BRIEF_WEBHOOK_SECRET non défini ou encore à sa valeur placeholder")
+        log.error("BRIEF_WEBHOOK_SECRET non défini ou encore à sa valeur placeholder")
         sys.exit(1)
 
     payload = json.dumps({"html": html}).encode("utf-8")
@@ -230,12 +251,12 @@ def post_to_webhook(html: str):
     )
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
-            _log(f"OK POST {webhook_url} → HTTP {resp.status}")
+            log.info("OK POST %s → HTTP %s", webhook_url, resp.status)
     except urllib.error.HTTPError as exc:
-        _log(f"ERREUR POST {webhook_url} → HTTP {exc.code} {exc.reason}")
+        log.error("POST %s → HTTP %s %s", webhook_url, exc.code, exc.reason)
         sys.exit(1)
     except urllib.error.URLError as exc:
-        _log(f"ERREUR POST {webhook_url} → {exc.reason}")
+        log.error("POST %s → %s", webhook_url, exc.reason)
         sys.exit(1)
 
 
@@ -251,6 +272,12 @@ def main():
     group.add_argument("--post", action="store_true", help="POST le HTML vers le webhook n8n")
     parser.add_argument("-o", "--output", default="brief.html", help="Fichier de sortie (défaut: brief.html)")
     args = parser.parse_args()
+
+    if args.post:
+        logfile = SCRIPT_DIR.parent / "brief.log"
+        setup_logging(logfile)
+    else:
+        setup_logging()
 
     cont_color, cont_text = check_containers()
     maj_color, maj_text = check_security_updates()

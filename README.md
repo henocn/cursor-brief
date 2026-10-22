@@ -61,13 +61,20 @@ Le fichier `.env` se place dans `/var/www/docker/brief/.env` (un niveau au-dessu
 Ajouter la ligne suivante avec `crontab -e` :
 
 ```cron
-0 8 * * 1-5 cd /var/www/docker/brief/app && set -a && . ../.env && set +a && python3 brief_8h.py --post >> ../brief.log 2>&1
+0 8 * * 1-5 cd /var/www/docker/brief/app && set -a && . ../.env && set +a && python3 brief_8h.py --post
 ```
 
 Détail :
 1. Charge les variables depuis `../.env`
 2. Exécute le script qui collecte les métriques, génère le HTML et le POST directement vers le webhook n8n
-3. Les logs (succès ou erreur avec timestamp et code HTTP) sont ajoutés à `../brief.log`
+3. Les logs (succès ou erreur, horodatés) sont écrits dans `../brief.log` avec rotation automatique
+
+## Logs
+
+En mode `--post`, le script écrit dans `/var/www/docker/brief/brief.log` via un `RotatingFileHandler` (stdlib) :
+- **1 Mo** par fichier, **4 fichiers** de rétention (`brief.log.1` … `brief.log.4`)
+- Pas besoin de `logrotate`, pas besoin de `sudo`
+- Pour consulter les dernières exécutions : `tail -30 /var/www/docker/brief/brief.log`
 
 ## Test rapide
 
@@ -105,5 +112,6 @@ Le workflow est importé **inactif** par défaut. Il accepte les requêtes POST 
 ├── n8n_workflow_brief_8h.json       # Workflow n8n (inactif)
 ├── .env.example                     # Modèle de variables d'environnement
 ├── .gitignore
-└── README.md                        # Ce fichier
+├── README.md                        # Ce fichier
+└── brief.log                        # Logs (généré, ignoré par git)
 ```
