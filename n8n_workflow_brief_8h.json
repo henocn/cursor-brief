@@ -23,7 +23,7 @@
     },
     {
       "parameters": {
-        "fromEmail": "brief@votre-domaine.tg",
+        "fromEmail": "brief@dekaeditions.tg",
         "toEmail": "henoc@dekaeditions.tg",
         "subject": "=Brief de 8h — {{ $now.format('dd/MM/yyyy') }}",
         "emailType": "html",

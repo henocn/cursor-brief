@@ -16,12 +16,12 @@ E-mail matinal automatique qui résume l'état de votre VPS Ubuntu chaque jour o
 ```
 ┌──────────────────────────────────┐       POST /webhook/brief-8h      ┌──────────────────┐
 │  Cron host (user equipe)         │  ──────────────────────────────▶  │  n8n (conteneur)  │
-│  brief_8h.py → HTML sur stdout   │    Header: X-Brief-Secret         │  Webhook → SMTP   │
-│  curl POST vers n8n              │                                   │  → henoc@…         │
+│  python3 brief_8h.py --post      │    Header: X-Brief-Secret         │  Webhook → SMTP   │
+│  (urllib, zéro dépendance)       │                                   │  → henoc@…         │
 └──────────────────────────────────┘                                   └──────────────────┘
 ```
 
-Le script tourne **sur l'hôte** (accès direct à Docker, apt, backups). Il génère le HTML et l'envoie via `curl` au webhook n8n qui se charge de l'envoi SMTP. Pas de SSH ni d'Execute Command dans le conteneur.
+Le script tourne **sur l'hôte** (accès direct à Docker, apt, backups). Avec `--post`, il génère le HTML et le POST lui-même vers le webhook n8n via `urllib` (aucune dépendance externe). Pas de SSH ni d'Execute Command dans le conteneur.
 
 ## Installation
 
@@ -48,6 +48,7 @@ Le fichier `.env` se place dans `/var/www/docker/brief/.env` (un niveau au-dessu
 | `CHATWOOT_API_TOKEN` | oui | Jeton API Chatwoot |
 | `CHATWOOT_ACCOUNT_ID` | non | ID du compte Chatwoot (défaut : `1`) |
 | `BRIEF_WEBHOOK_SECRET` | oui | Secret partagé avec le webhook n8n (header `X-Brief-Secret`) |
+| `BRIEF_WEBHOOK_URL` | non | URL du webhook n8n (défaut : `http://127.0.0.1:5678/webhook/brief-8h`) |
 | `IGNORE_CONTAINERS` | non | Conteneurs à exclure du monitoring, séparés par des virgules (défaut : `listmonk_app,listmonk_db`) |
 | `RESTIC_REPOSITORY` | non | Dépôt Restic (active la vérification off-site) |
 | `RESTIC_PASSWORD` | non | Mot de passe du dépôt Restic |
@@ -60,22 +61,13 @@ Le fichier `.env` se place dans `/var/www/docker/brief/.env` (un niveau au-dessu
 Ajouter la ligne suivante avec `crontab -e` :
 
 ```cron
-0 8 * * 1-5 cd /var/www/docker/brief/app && set -a && . ../.env && set +a && python3 brief_8h.py --stdout | curl -s -X POST http://127.0.0.1:5678/webhook/brief-8h -H "Content-Type: application/json" -H "X-Brief-Secret: $(printenv BRIEF_WEBHOOK_SECRET)" -d @<(jq -Rsc '{"html": .}') > /dev/null
+0 8 * * 1-5 cd /var/www/docker/brief/app && set -a && . ../.env && set +a && python3 brief_8h.py --post >> ../brief.log 2>&1
 ```
 
-Détail de la commande :
+Détail :
 1. Charge les variables depuis `../.env`
-2. Exécute le script qui affiche le HTML sur stdout
-3. Enveloppe le HTML dans `{"html": "…"}` via `jq`
-4. POST vers le webhook n8n avec le header d'authentification
-
-### Dépendances système
-
-`curl` et `jq` doivent être installés sur l'hôte :
-
-```bash
-sudo apt install -y curl jq
-```
+2. Exécute le script qui collecte les métriques, génère le HTML et le POST directement vers le webhook n8n
+3. Les logs (succès ou erreur avec timestamp et code HTTP) sont ajoutés à `../brief.log`
 
 ## Test rapide
 
@@ -86,14 +78,10 @@ set -a && . ../.env && set +a
 
 # 1. Vérifier la génération du HTML
 python3 brief_8h.py --stdout > /tmp/brief.html
-xdg-open /tmp/brief.html   # ou ouvrir dans un navigateur
+# Ouvrir /tmp/brief.html dans un navigateur pour vérifier le rendu
 
-# 2. Tester l'envoi au webhook n8n (workflow activé requis)
-python3 brief_8h.py --stdout | curl -s -X POST \
-  http://127.0.0.1:5678/webhook/brief-8h \
-  -H "Content-Type: application/json" \
-  -H "X-Brief-Secret: $BRIEF_WEBHOOK_SECRET" \
-  -d @<(jq -Rsc '{"html": .}')
+# 2. Tester l'envoi complet (workflow n8n activé requis)
+python3 brief_8h.py --post
 ```
 
 ## Workflow n8n
@@ -104,7 +92,7 @@ python3 brief_8h.py --stdout | curl -s -X POST \
 4. Configurer le credential **SMTP Brief** avec vos paramètres SMTP.
 5. Activer le workflow.
 
-Le workflow est importé **inactif** par défaut. Il accepte les requêtes POST sur `/webhook/brief-8h`.
+Le workflow est importé **inactif** par défaut. Il accepte les requêtes POST sur `/webhook/brief-8h` et envoie l'e-mail depuis `brief@dekaeditions.tg`.
 
 ## Structure du projet
 

@@ -5,6 +5,7 @@ Collecte les métriques du VPS et génère le brief matinal au format HTML.
 Usage :
     python3 brief_8h.py              # écrit brief.html dans le dossier courant
     python3 brief_8h.py --stdout     # affiche le HTML sur stdout
+    python3 brief_8h.py --post       # génère et POST vers le webhook n8n
 """
 
 import argparse
@@ -144,12 +145,12 @@ def check_backups():
 
 
 ####################################################################
-#            Conversations Chatwoot non lues                       #
+#           Conversations Chatwoot ouvertes                        #
 ####################################################################
 
 
 def check_chatwoot():
-    """Interroge /conversations/meta pour obtenir le nombre de conversations non lues."""
+    """Interroge /conversations/meta pour obtenir le nombre de conversations ouvertes."""
     base_url = os.environ.get("CHATWOOT_BASE_URL", "").rstrip("/")
     token = os.environ.get("CHATWOOT_API_TOKEN", "")
     account_id = os.environ.get("CHATWOOT_ACCOUNT_ID", "1")
@@ -195,25 +196,71 @@ def compute_resume(cont_color, maj_color, backup_color):
 
 
 ####################################################################
+#                    POST vers le webhook n8n                      #
+####################################################################
+
+
+def _log(msg: str):
+    """Écrit une ligne horodatée sur stderr (visible dans brief.log via cron)."""
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{ts}] {msg}", file=sys.stderr)
+
+
+def post_to_webhook(html: str):
+    """Envoie le HTML au webhook n8n via urllib (pas besoin de curl/jq)."""
+    webhook_url = os.environ.get(
+        "BRIEF_WEBHOOK_URL",
+        "http://127.0.0.1:5678/webhook/brief-8h",
+    )
+    secret = os.environ.get("BRIEF_WEBHOOK_SECRET", "")
+
+    if not secret:
+        _log("ERREUR : BRIEF_WEBHOOK_SECRET non défini")
+        sys.exit(1)
+
+    payload = json.dumps({"html": html}).encode("utf-8")
+    req = urllib.request.Request(
+        webhook_url,
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "X-Brief-Secret": secret,
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            _log(f"OK POST {webhook_url} → HTTP {resp.status}")
+    except urllib.error.HTTPError as exc:
+        _log(f"ERREUR POST {webhook_url} → HTTP {exc.code} {exc.reason}")
+        sys.exit(1)
+    except urllib.error.URLError as exc:
+        _log(f"ERREUR POST {webhook_url} → {exc.reason}")
+        sys.exit(1)
+
+
+####################################################################
 #                            Main                                  #
 ####################################################################
 
 
 def main():
     parser = argparse.ArgumentParser(description="Brief de 8h — collecte et rendu HTML")
-    parser.add_argument("--stdout", action="store_true", help="Afficher le HTML sur stdout")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--stdout", action="store_true", help="Afficher le HTML sur stdout")
+    group.add_argument("--post", action="store_true", help="POST le HTML vers le webhook n8n")
     parser.add_argument("-o", "--output", default="brief.html", help="Fichier de sortie (défaut: brief.html)")
     args = parser.parse_args()
 
     cont_color, cont_text = check_containers()
     maj_color, maj_text = check_security_updates()
     bkp_color, bkp_text = check_backups()
-    cw_unread, cw_err = check_chatwoot()
+    cw_count, cw_err = check_chatwoot()
 
     if cw_err:
         cw_text = f"0 (⚠ {cw_err})"
     else:
-        cw_text = str(cw_unread)
+        cw_text = str(cw_count)
 
     values = {
         "DATE": datetime.now().strftime("%d/%m/%Y"),
@@ -224,12 +271,14 @@ def main():
         "MAJ_TEXTE": maj_text,
         "SAUVEGARDES_COULEUR": bkp_color,
         "SAUVEGARDES_TEXTE": bkp_text,
-        "CHATWOOT_NON_LUS": cw_text,
+        "CHATWOOT_OUVERTES": cw_text,
     }
 
     html = render(TEMPLATE_PATH, values)
 
-    if args.stdout:
+    if args.post:
+        post_to_webhook(html)
+    elif args.stdout:
         sys.stdout.write(html)
     else:
         Path(args.output).write_text(html, encoding="utf-8")
