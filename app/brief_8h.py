@@ -214,8 +214,8 @@ def post_to_webhook(html: str):
     )
     secret = os.environ.get("BRIEF_WEBHOOK_SECRET", "")
 
-    if not secret:
-        _log("ERREUR : BRIEF_WEBHOOK_SECRET non défini")
+    if not secret or secret.startswith("changez_moi"):
+        _log("ERREUR : BRIEF_WEBHOOK_SECRET non défini ou encore à sa valeur placeholder")
         sys.exit(1)
 
     payload = json.dumps({"html": html}).encode("utf-8")
