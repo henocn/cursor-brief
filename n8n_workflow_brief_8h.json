@@ -1,0 +1,68 @@
+{
+  "name": "Brief de 8h",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "brief-8h",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Brief",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [220, 300],
+      "webhookId": "brief-8h",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REMPLACER_PAR_VOTRE_CREDENTIAL_ID",
+          "name": "Brief Header Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "brief@dekaeditions.tg",
+        "toEmail": "henoc@dekaeditions.tg",
+        "subject": "=Brief de 8h — {{ $now.format('dd/MM/yyyy') }}",
+        "emailType": "html",
+        "html": "={{ $json.body.html }}",
+        "options": {}
+      },
+      "id": "send-email",
+      "name": "Envoyer par e-mail",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [500, 300],
+      "credentials": {
+        "smtp": {
+          "id": "REMPLACER_PAR_VOTRE_CREDENTIAL_ID",
+          "name": "SMTP Brief"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Brief": {
+      "main": [
+        [
+          {
+            "node": "Envoyer par e-mail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "brief-8h"
+    }
+  ]
+}
