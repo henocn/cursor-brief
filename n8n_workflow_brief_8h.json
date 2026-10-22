@@ -1,0 +1,86 @@
+{
+  "name": "Brief de 8h",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Cron 08h00 UTC (lun-ven)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "command": "cd /var/www/docker/brief-8h && /usr/bin/python3 brief_8h.py --stdout"
+      },
+      "id": "exec-script",
+      "name": "Exécuter brief_8h.py",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "brief@votre-domaine.tg",
+        "toEmail": "henoc@dekaeditions.tg",
+        "subject": "=Brief de 8h — {{ $now.format('dd/MM/yyyy') }}",
+        "emailType": "html",
+        "html": "={{ $json.stdout }}",
+        "options": {}
+      },
+      "id": "send-email",
+      "name": "Envoyer par e-mail",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [700, 300],
+      "credentials": {
+        "smtp": {
+          "id": "REMPLACER_PAR_VOTRE_CREDENTIAL_ID",
+          "name": "SMTP Brief"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Cron 08h00 UTC (lun-ven)": {
+      "main": [
+        [
+          {
+            "node": "Exécuter brief_8h.py",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Exécuter brief_8h.py": {
+      "main": [
+        [
+          {
+            "node": "Envoyer par e-mail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "brief-8h"
+    }
+  ]
+}

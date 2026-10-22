@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Brief de 8h</title></head>
+<body style="margin:0;padding:0;background:#f7f8f9;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#24282e;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f7f8f9;padding:24px 0;"><tr><td align="center">
+<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#ffffff;border:1px solid #e1e4e8;border-radius:8px;">
+<tr><td style="padding:24px 24px 8px;">
+<div style="font-size:12px;color:#6b737d;text-transform:uppercase;letter-spacing:.06em;">Brief de 8h · {{DATE}}</div>
+<div style="font-size:20px;font-weight:600;margin-top:4px;">Bonjour Henoc, {{RESUME}}</div>
+</td></tr>
+<tr><td style="padding:16px 24px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+<!-- Couleurs statut : ok #1a7f37 / warn #b35900 / ko #c62828 -->
+<tr><td style="padding:12px 0;border-bottom:1px solid #eef0f2;">
+<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:{{CONTENEURS_COULEUR}};margin-right:10px;"></span>
+<strong>Conteneurs</strong> <span style="color:#4f5660;"> {{CONTENEURS_TEXTE}}</span></td></tr>
+<tr><td style="padding:12px 0;border-bottom:1px solid #eef0f2;">
+<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:{{MAJ_COULEUR}};margin-right:10px;"></span>
+<strong>Mises à jour sécurité</strong> <span style="color:#4f5660;"> {{MAJ_TEXTE}}</span></td></tr>
+<tr><td style="padding:12px 0;border-bottom:1px solid #eef0f2;">
+<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:{{SAUVEGARDES_COULEUR}};margin-right:10px;"></span>
+<strong>Sauvegardes</strong> <span style="color:#4f5660;"> {{SAUVEGARDES_TEXTE}}</span></td></tr>
+<tr><td style="padding:12px 0;">
+<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#1f5bd0;margin-right:10px;"></span>
+<strong>Chatwoot</strong> <span style="color:#4f5660;"> {{CHATWOOT_NON_LUS}} message(s) non lu(s)</span></td></tr>
+</table></td></tr>
+<tr><td style="padding:8px 24px 24px;">
+<a href="{{LIEN_DETAIL}}" style="display:inline-block;background:#1f5bd0;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 16px;border-radius:6px;">Voir le détail</a>
+</td></tr>
+<tr><td style="padding:12px 24px;border-top:1px solid #eef0f2;font-size:12px;color:#9aa1aa;">Envoyé automatiquement par l'Équipe Henoc.</td></tr>
+</table></td></tr></table></body></html>
